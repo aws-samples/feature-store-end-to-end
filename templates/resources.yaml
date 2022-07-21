@@ -1,0 +1,630 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create Infrastructure to deploy Amazon SageMaker Feature Store for the Expedia Hotel Recommendations dataset.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Required Parameters
+        Parameters:
+          - AppName
+          - LambdaCodeBucketName
+          - LambdaCodeZipFileName
+          - SageMakerNotebookName
+          - CustomerInputFeatureGroupName
+          - DestinationsFeatureGroupName
+          - DataBucketName
+          - MLModelBucketName
+          - FeatureStoreBucketName
+          - AthenaQueryResultsBucketName
+          - RawDataDir
+          - AlwaysRecreateFeatureGroup
+          - NotebookInstanceType
+          - TrainingDatasetFileName
+          - TestDatasetFileName
+          - ValidationDatasetFileName
+          - DestinationsDatasetName
+          - DestinationFeaturesFileName
+          - TrainingJobInstanceType
+          - TrainingJobNodeInstanceCount
+          - ModelEndpointInstanceType
+          - ModelEndpointInstanceCount
+          - CustomerInputStreamName
+          
+    ParameterLabels:
+      AppName:
+        default: Name of the overall application
+      LambdaCodeBucketName:
+        default: Name of the S3 bucket for holding the zip file of the Lambda code
+      LambdaCodeZipFileName:
+        default: Name of the zip file in S3 bucket containing the code for the hotel cluster prediction lambda.
+      SageMakerNotebookName:
+        default: Name of SageMaker Notebook Instance
+      CustomerInputFeatureGroupName:
+        default: Feature Group name for customer behavior
+      DestinationsFeatureGroupName:
+        default: Feature group name for destinations (see Kaggle documentation)
+      DataBucketName:
+        default: Name of S3 bucket containing the raw data
+      FeatureStoreBucketName:
+        default: Name of S3 bucket containing the offline feature store data
+      MLModelBucketName:
+        default: Name of the S3 bucket for holding the ML model binaries
+      AthenaQueryResultsBucketName:
+        default: Name of S3 bucket for storing Athena query results
+      AlwaysRecreateFeatureGroup:
+        default: Whether or not to delete a feature group if it exists prior to creating it
+      NotebookInstanceType:
+        default: Instance type to use for the notebook
+      RawDataDir:
+        default: Folder name in the bucket in which the raw data is kept
+      TrainingDatasetFileName:
+        default: File containing the training dataset.
+      TestDatasetFileName:
+        default: File containing the test dataset.
+      ValidationDatasetFileName:
+        default: File containing the validation dataset.
+      DestinationFeaturesFileName:
+        default: File containg the destination features dataset.
+      ModelEndpointInstanceType:
+        default: Instance type to use for ML model endpoint.
+      ModelEndpointInstanceCount:
+        default: Number of node instances for the ML model endpoint.
+      TrainingJobInstanceType:
+        default: Instance type to use for ML model training job.
+      TrainingJobNodeInstanceCount:
+        default: Number of node instances to use for the ML model training job.
+      CustomerInputStreamName:
+        default: Kinesis stream for simulating real-time customer input data.
+
+Parameters:
+  AppName:
+    Default: hotel_cluster_prediction
+    Type: String
+    AllowedValues: [hotel_cluster_prediction]
+    Description: Name of the overall application, this is used while creating the ML model endpoint.
+  SageMakerNotebookName:
+    Default: featurestore-expedia-notebook-v1
+    Type: String
+    Description: Enter name of SageMaker Notebook instance.
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](-*[a-z0-9])*
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+  DestinationsFeatureGroupName:    
+    Default: expedia-destinations
+    Type: String
+    Description: Enter customer behavior feature group name.
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](-*[a-z0-9])* # no UPPERCASE due to S3 dependency
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+  CustomerInputFeatureGroupName:    
+    Default: expedia-customer-inputs
+    Type: String
+    Description: Enter customer behavior feature group name.
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](-*[a-z0-9])* # no UPPERCASE due to S3 dependency
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+  LambdaCodeBucketName:
+    Default: expedia-hotel-cluster-prediction-demo-code
+    Type: String
+    Description: Enter name of bucket for storing the zip file for Lmabda function code. Some randomness will be appended to the bucket name provided.
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](-*[a-z0-9])* # no UPPERCASE due to S3 dependency
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+  LambdaCodeZipFileName:
+    Default: hotel_cluster_predictions_v1.zip
+    Type: String
+    Description: Enter name of zip file containing the hotel cluster prediction lambda function code.
+
+  MLModelBucketName:
+    Default: expedia-ml-models
+    Type: String
+    Description: Enter name of bucket for storing the ML model binaries. Some randomness will be appended to the bucket name provided.
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](-*[a-z0-9])* # no UPPERCASE due to S3 dependency
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+  DataBucketName:
+    Default: expedia-customer-behavior-data
+    Type: String
+    Description: Enter name of bucket customer behavior raw data bucket. Some randomness will be appended to the bucket name provided.
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](-*[a-z0-9])* # no UPPERCASE due to S3 dependency
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+  RawDataDir:
+    Default: raw_data
+    Type: String
+    Description: Enter the name of folder inside the data bucket in which the raw data files will be kept.
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](_*[a-z0-9])* # no UPPERCASE due to S3 dependency
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+  TrainingDatasetFileName:
+    Default: train.csv
+    Type: String
+    Description: Enter the name of the training dataset. 
+  TestDatasetFileName:
+    Default: test.csv
+    Type: String
+    Description: Enter the name of the test dataset. 
+  ValidationDatasetFileName:
+    Default: validation.csv
+    Type: String
+    AllowedValues: [validation.csv]
+    Description: Enter the name of the validation dataset.
+  DestinationFeaturesFileName:
+    Default: destinations.csv
+    Type: String
+    AllowedValues: [destinations.csv]
+    Description: Enter the name of the file containing the destinations fetures.
+  FeatureStoreBucketName:
+    Default: expedia-feature-store-offline
+    Type: String
+    Description: Enter name of bucket for offline Expedia feature store. Some randomness will be appended to the bucket name provided.
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](-*[a-z0-9])* # no UPPERCASE due to S3 dependency
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+  AthenaQueryResultsBucketName:
+    Default: athena-query-results
+    Type: String
+    Description: Enter name of bucket for storing Athena query results. Some randomness will be appended to the bucket name provided.
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](-*[a-z0-9])* # no UPPERCASE due to S3 dependency
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+  AlwaysRecreateFeatureGroup:
+    Default: false
+    Type: String
+    AllowedValues: [true, false]
+    Description: Enter whether or not you want to recreate feature group everytime the notebook is run.
+  NotebookInstanceType:
+    Default: ml.t3.2xlarge
+    Type: String
+    AllowedValues: [ml.t3.medium, ml.t3.large, ml.t3.xlarge, ml.t3.2xlarge]
+    Description: Enter the instance type to use for the notebook. Default is ml.t3.xlarge.
+  ModelEndpointInstanceType:
+    Default: ml.m5.xlarge
+    Type: String
+    AllowedValues: [ml.m5.xlarge]
+    Description: Enter the instance type to use for the ML model endpoint. Default is ml.m5.xlarge.
+  TrainingJobInstanceType:
+    Default: ml.m5.xlarge
+    Type: String
+    AllowedValues: [ml.m5.xlarge]
+    Description: Enter the instance type to use for running the ML model training job. Default is ml.m5.xlarge.
+  ModelEndpointInstanceCount:
+    Default: 2
+    Type: Number
+    AllowedValues: [1, 2]
+    Description: Enter the number of nodes for hosting the ML model endpoint.
+  TrainingJobNodeInstanceCount:
+    Default: 2
+    Type: Number
+    AllowedValues: [1, 2]
+    Description: Enter the number of nodes for running the ML model training job.
+  CustomerInputStreamName:
+    Default: expedia-customer-input-realtime
+    Type: String
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](-*[a-z0-9])* # no UPPERCASE due to S3 dependency
+    ConstraintDescription: Must be lowercase or numbers with a length of 1-63 characters.
+
+Resources:
+  SageMakerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "sagemaker.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "kinesisanalytics.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "glue.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "databrew.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonKinesisFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonKinesisAnalyticsFullAccess"
+        - "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - "arn:aws:iam::aws:policy/AWSCodeCommitReadOnly"
+        - "arn:aws:iam::aws:policy/AWSGlueDataBrewFullAccessPolicy"
+        - "arn:aws:iam::aws:policy/AmazonAthenaFullAccess"
+      Policies:
+        - PolicyName: AdditionalSageMakerPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AllowCloudFormation
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                Resource: "*"
+              - Sid: AllowLambdaInvoke
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:InvokeAsync
+                  - lambda:CreateEventSourceMapping
+                  - lambda:DeleteEventSourceMapping
+                  - lambda:ListEventSourceMappings
+                Resource: "*"
+              - Sid: SageMakerTesting
+                Effect: Allow
+                Action:
+                  - sagemaker:CreateExperiment
+                  - sagemaker:CreateTrial
+                  - sagemaker:DescribeEndpoint
+                  - sagemaker:DescribeEndpointConfig
+                  - sagemaker:DescribeMonitoringSchedule
+                  - sagemaker:DescribeProcessingJob
+                  - sagemaker:InvokeEndpoint
+                  - sagemaker:ListMonitoringExecutions
+                  - sagemaker:Search
+                Resource: "*"
+              - Sid: AllowCloudWatch
+                Effect: Allow
+                Action:
+                  - cloudwatch:PutDashboard
+                  - cloudwatch:PutMetricData
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:DeleteAlarms
+                  - cloudwatch:PutDashboard
+                  - cloudwatch:DeleteDashboards
+                Resource: "*"
+              - Sid: AllowPassRole
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:PassRole
+                Resource: "*"
+              - Sid: AllowLogQuery
+                Effect: Allow
+                Action:
+                  - logs:StartQuery
+                  - logs:GetQueryResults
+                Resource:
+                  - "*"
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonKinesisFullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      Path: "/"
+      Policies:
+        - PolicyName: AdditionalLambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AllowCloudFormation
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                Resource: "*"
+              - Sid: AllowLambdaInvoke
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:InvokeAsync
+                  - lambda:CreateEventSourceMapping
+                  - lambda:DeleteEventSourceMapping
+                  - lambda:ListEventSourceMappings
+                Resource: "*"
+              - Sid: AllowSageMakerInvoke
+                Effect: Allow
+                Action:
+                  - sagemaker:CreateExperiment
+                  - sagemaker:CreateTrial
+                  - sagemaker:DescribeEndpoint
+                  - sagemaker:DescribeEndpointConfig
+                  - sagemaker:DescribeMonitoringSchedule
+                  - sagemaker:DescribeProcessingJob
+                  - sagemaker:InvokeEndpoint
+                  - sagemaker:ListMonitoringExecutions
+                  - sagemaker:Search
+                Resource: "*"
+
+  FeatureStorePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: SageMakerFeatureStorePolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: SageMakerFeatureStore
+            Effect: Allow
+            Action:
+              - sagemakerfeaturestore:CreateFeatureGroup
+              - sagemakerfeaturestore:UpdateFeatureGroup
+              - sagemakerfeaturestore:DescribeFeatureGroup
+              - sagemakerfeaturestore:DeleteFeatureGroup
+              - sagemakerfeaturestore:ListFeatureGroups
+              - sagemaker:PutRecord
+              - sagemaker:GetRecord
+              - sagemaker:DeleteRecord
+              - featurestore-runtime:PutRecord
+              - featurestore-runtime:GetRecord
+              - featurestore-runtime:DeleteRecord
+              - s3:PutBucketPolicy
+              - s3:DeleteBucket
+              - glue:CreateCrawler
+              - glue:StartCrawler
+              - glue:GetCrawler
+              - glue:GetTable
+              - glue:GetPartitions
+              - glue:DeleteCrawler
+              - glue:DeleteDatabase
+              - athena:StartQueryExecution
+              - athena:GetQueryExecution
+            Resource: "*"
+      Roles:
+        - !Ref SageMakerRole
+        - !Ref LambdaRole
+
+  S3AccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: S3FeatureStorePolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: FeatureStoreOfflineStoreS3BucketPolicy
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+              - s3:GetBucket*
+              - s3:GetObject*
+              - s3:ListBucket
+              - s3:PutObject
+              - s3:PutObjectAcl
+            Resource:
+              - !Sub arn:aws:s3:::sagemaker-${AWS::Region}-${AWS::AccountId}/*
+              - !Sub arn:aws:s3:::sagemaker-${AWS::Region}-${AWS::AccountId}
+          - Sid: AllowLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: "*"
+      Roles:
+        - !Ref SageMakerRole
+        - !Ref LambdaRole
+
+  SagemakerFeatureStoreNotebook:
+    Type: "AWS::SageMaker::NotebookInstance"
+    Properties:
+      NotebookInstanceName: !Ref SageMakerNotebookName
+      InstanceType: !Ref NotebookInstanceType
+      RoleArn: !GetAtt SageMakerRole.Arn
+      DefaultCodeRepository: "https://git-codecommit.us-east-1.amazonaws.com/v1/repos/feature-store-expedia"
+      Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName
+      
+  MLModelBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub
+      - '${MLModelBucketName}-${RandomGUID}'
+      - { RandomGUID: !Select [0, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId ]]]] }
+      Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName
+
+  RawDataBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub
+      - '${DataBucketName}-${RandomGUID}'
+      - { RandomGUID: !Select [0, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId ]]]] }
+      Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName
+
+  FeatureStoreBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub
+      - '${FeatureStoreBucketName}-${RandomGUID}'
+      - { RandomGUID: !Select [0, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId ]]]] }
+      Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName
+
+  AthenaQueryResultsBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub
+      - '${AthenaQueryResultsBucketName}-${RandomGUID}'
+      - { RandomGUID: !Select [0, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId ]]]] }
+      Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName
+
+  HotelClusterPredictionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: PredictHotelCluster
+      Description: Lambda function for predicting hotel clusters from customer input (kinesis)
+                   and destination features (feature store) using a SageMaker ML model endpoint.
+      Runtime: python3.7
+      Code:
+        S3Bucket: !Ref LambdaCodeBucketName
+        S3Key: !Ref LambdaCodeZipFileName
+      Handler: hotel_cluster_predictions.handler
+      MemorySize: 512
+      Timeout: 60
+      Role: !GetAtt LambdaRole.Arn
+      Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName
+        -
+          Key: Version
+          Value: v3
+      Environment:
+        Variables:
+          ENDPOINT_NAME: this_will_be_overwritten_by_notebook
+          FG_NAME: this_will_be_overwritten_by_notebook
+          DDB_TABLE_NAME: this_will_be_overwritten_by_notebook
+          ONLINE_FEATURE_GROUP_KEY: this_will_be_overwritten_by_notebook
+          ONLINE_FEATURE_GROUP_FEATURES_OF_INTEREST: this_will_be_overwritten_by_notebook
+          PREDICTED_VARIABLE: this_will_be_overwritten_by_notebook
+          
+  ExpediaCustomerInputStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+        Name: !Ref CustomerInputStreamName
+        RetentionPeriodHours: 24
+        ShardCount: 1
+        StreamEncryption:
+          EncryptionType: KMS
+          KeyId: alias/aws/kinesis
+        Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName
+
+
+
+  CustomerInputStreamToPredictionLambdaMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn:
+        Fn::Join:
+          - ""
+          -
+            - "arn:aws:kinesis:"
+            -
+              Ref: "AWS::Region"
+            - ":"
+            -
+              Ref: "AWS::AccountId"
+            - ":stream/"
+            -
+              Ref: "CustomerInputStreamName"
+      FunctionName:
+        Fn::GetAtt:
+          - "HotelClusterPredictionFunction"
+          - "Arn"
+      StartingPosition: "LATEST"
+
+  HotelClusterPredictionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ExpediaPerCustomerHotelClusterPredictions
+      AttributeDefinitions:
+        - 
+          AttributeName: user_id
+          AttributeType: "S"
+        - 
+          AttributeName: date_time
+          AttributeType: "S"
+        
+      KeySchema:
+        - 
+          AttributeName: user_id
+          KeyType: HASH
+        - 
+          AttributeName: date_time
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      Tags: 
+        -
+          Key: Project
+          Value: !Ref AppName    
+
+Outputs:
+  SagemakerFeatureStoreNotebookId:
+    Value: !Ref SagemakerFeatureStoreNotebook
+    Description: Arn of the Jupyter notebook created for running the demo code.
+  DataBucketName:
+    Value: !Ref RawDataBucket
+    Description: Name of the S3 bucket containing feature store demo data.
+  MLModelBucketName:
+    Value: !Ref MLModelBucket
+    Description: Name of the S3 bucket containing the ML model binaries. 
+  FeatureStoreBucketName:
+    Value: !Ref FeatureStoreBucket
+    Description: Name of the S3 bucket containing feature store demo data.
+  AthenaQueryResultsBucketName:
+    Value: !Ref AthenaQueryResultsBucket
+    Description: Name of the S3 bucket containing feature store demo data.
+  HotelClusterPredictionFunction:
+    Value: !GetAtt HotelClusterPredictionFunction.Arn
+    Description: Arn of the hotel cluster prediction lambda function.
+  HotelClusterPredictionsTableName:
+    Value: !Ref HotelClusterPredictionsTable
+    Description: Name of the DynamoDB table containing the hotel cluster predictions
