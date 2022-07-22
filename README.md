@@ -47,10 +47,10 @@ Prior to running the steps under Instructions, you will need access to an AWS Ac
 
 There are a series of notebooks which should be run in order. Follow the step-by-step guide in each notebook:
 
-* [notebooks/0_batch_ingestion.ipynb](./notebooks/0_batch_ingestion.ipynb) - Create feature groups and ingest data from S3.
+* [notebooks/0_batch_ingestion.ipynb](./notebooks/0_batch_ingestion.ipynb) - Create feature groups and ingest data from S3. Wait 15 minutes after running this notebook to ensure that all data is available in the offline feature store.
 * [notebooks/1_ml_model_training.ipynb](./notebooks/1_ml_model_training.ipynb) - Read feature data and train ML model and deploy as SageMaker Endpoint.
 * [notebooks/2_online_inference.ipynb](./notebooks/2_online_inference.ipynb) - make hotel cluster predictions on streaming customer inputs.
-* [notebooks/3_lineage_tracking.ipynb](./notebooks/3_lineage_tracking.ipynb) - lineage tracking of feature data and ML models.
+* [notebooks/3_lineage_tracking.ipynb](./notebooks/3_lineage_tracking.ipynb) - Lineage tracking of feature data and ML models.
 * [notebooks/4_feature_monitoring.ipynb](./notebooks/4_feature_monitoring.ipynb) - feature monitoring and profiling.
 
 #### Optional steps
@@ -59,8 +59,9 @@ There are a series of notebooks which should be run in order. Follow the step-by
 
 ### **CLEAN UP - IMPORTANT**
 To destroy the AWS resources created as part of this example, complete the following two steps:
-1. Delete all objects from the buckets created by this stack (look at the Cloud Formation stack output for a list of bucket names).
-2. Go to CloudFormation in the AWS console, select `expedia-feature-store-demo-v2` and click 'Delete'.
+1. Run the [notebooks/5_cleanup.ipynb](./notebooks/5_cleanup.ipynb) to delete S3 objects and SageMaker endpoint (these are resources not created by the cloud formation template).
+
+2. Go to Cloud Formation in the AWS console, select `expedia-feature-store-demo-v2` and click 'Delete'.
 
 ## Security
 
