@@ -24,21 +24,22 @@ This implementation shows you how to do the following:
 
 Prior to running the steps under Instructions, you will need access to an AWS Account where you have full Admin privileges. The CloudFormation template will deploy an AWS Lambda functions, IAM Role, and a new SageMaker notebook instance with this repo already cloned. In addition, having basic knowledge of the following services will be valuable: Amazon Kinesis Data Streams, Amazon SageMaker, AWS Lambda functions, Amazon IAM Roles.
 
+> **_PRE-REQ 1:_**  The cloud formation template also deploys a Lambda function and the code for the Lambda function needs to be in an S3 bucket that needs to be created prior to running the cloud formation template. Create an S3 bucket and place the [hotel_cluster_predictions_v1.zip](./lambda/hotel_cluster_predictions_v1.zip) file in the bucket. Keep the name of this bucket handy as it will be required as an input for the _"Name of the S3 bucket for holding the zip file of the Lambda code"_ parameter in the cloud formation template.
+
+> **_PRE-REQ 2:_**  If you have a Cloud Trail created for your account, make sure that the "Exclude AWS KMS events" checkboxz is checked under the Cloud Trail -> Management Events setting. Checking this checkbox will prevent AWS KMS events from getting logged in Cloud Trail. Ingesting data into the Feature Store triggers a KMS event and depending upon the size of the data this could result in a huge cost if not disabled, therefore, for the purpose of this demo it is recommended that AWS KMS events are not logged in Cloud Trail.
+
 ### Instructions
 
-0. The dataset used for this code is available on Kaggle and can be downloaded directly from the [Kaggle website](https://www.kaggle.com/competitions/expedia-hotel-recommendations/data). The dataset is not included as part of this repository. The `train.csv`, `test.csv` and `destinations.csv` files from the dataset need to be uploaded to an S3 bucket for storing the raw data (see `DataBucketName` when creating the Cloud Formation stack).
+1. Use the Cloud Formation template available in the *templates* folder of this repository to launch a Cloud Formation stack. Use `expedia-feature-store-demo-v2` as the stack name. All parameters needed by the template have a default value, you can leave these defaults unchanged unless there is a need to.   
 
-1. This repository requires a Lambda function to be deployed in your AWS account, to do that, create an S3 bucket and upload the `hotel_cluster_predictions_v1.zip` file in that bucket. The bucket name and the uploaded zip file name will be needed as inputs while using the Cloud Formation template to create the rest of the resources in step 2.
 
-2. Use the Cloud Formation template available in the *templates* folder of this repository to launch a Cloud Formation stack. Use `expedia-feature-store-demo-v2` as the stack name. All parameters needed by the template have a default value, you can leave these defaults unchanged unless there is a need to.
+   > **_NOTE:_**  This code has been tested only in the us-east-1 region although it is expected to work in other regions as well (but has not been tested in other regions). You can view the CloudFormation template directly by looking [here](./templates/resources.yaml). The stack will take a few minutes to launch. When it completes, you can view the items created by clicking on the Resources tab. 
 
-This code has been tested only in the us-east-1 region although it is expected to work in other regions as well (but has not been tested in other regions).
+2. Once the stack is complete, browse to Amazon SageMaker in the AWS console and click on the 'Notebook Instances' tab on the left. 
 
-You can view the CloudFormation template directly by looking [here](./templates/resources.yaml). The stack will take a few minutes to launch. When it completes, you can view the items created by clicking on the Resources tab. 
+3. Click either 'Jupyter' or 'JupyterLab' to access the SageMaker Notebook instance. The Cloudformation template has cloned this git repository into the notebook instance for you. All of the example code to work through is in the notebooks directory. 
 
-3. Once the stack is complete, browse to Amazon SageMaker in the AWS console and click on the 'Notebook Instances' tab on the left. 
-
-4. Click either 'Jupyter' or 'JupyterLab' to access the SageMaker Notebook instance. The Cloudformation template has cloned this git repository into the notebook instance for you. All of the example code to work through is in the notebooks directory. 
+4. The dataset used for this code is available on Kaggle and can be downloaded directly from the [Kaggle website](https://www.kaggle.com/competitions/expedia-hotel-recommendations/data). The dataset is NOT included as part of this repository. The cloud formation template creates an S3 bucket to hold the raw data. The data downloaded form the Kaggle website needs to be uploaded to a folder called _raw_data_ in this bucket. See the output section of the cloud formation stack and look for _DataBucketName_, this is the name of the bucket created by the cloud formation stack in which the raw data needs to be uploaded (manually). Create a folder called _raw_data_ in this bucket and upload the files `train.csv`, `test.csv` and `destinations.csv` from the Kaggle dataset to this bucket in the _raw_data_ folder. 
 
 **To use these notebooks from an existing SageMaker Studio domain, add a new Studio user and select the IAM role that was created by the CloudFormation stack. Open Studio for that new user, and git clone this repo. All other steps are the same.**
 

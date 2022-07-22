@@ -45,7 +45,7 @@ Metadata:
       DestinationsFeatureGroupName:
         default: Feature group name for destinations (see Kaggle documentation)
       DataBucketName:
-        default: Name of S3 bucket containing the raw data
+        default: Name of S3 bucket from which the notebooks read the raw data
       FeatureStoreBucketName:
         default: Name of S3 bucket containing the offline feature store data
       MLModelBucketName:
