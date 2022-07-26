@@ -457,7 +457,7 @@ Resources:
       NotebookInstanceName: !Ref SageMakerNotebookName
       InstanceType: !Ref NotebookInstanceType
       RoleArn: !GetAtt SageMakerRole.Arn
-      DefaultCodeRepository: "https://git-codecommit.us-east-1.amazonaws.com/v1/repos/feature-store-expedia"
+      DefaultCodeRepository: "https://github.com/aws-samples/feature-store-end-to-end.git"
       Tags: 
         -
           Key: Project
