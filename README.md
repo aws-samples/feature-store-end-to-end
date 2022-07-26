@@ -59,7 +59,7 @@ There are a series of notebooks which should be run in order. Follow the step-by
 To destroy the AWS resources created as part of this example, complete the following two steps:
 1. Run the [notebooks/5_cleanup.ipynb](./notebooks/5_cleanup.ipynb) to delete S3 objects and SageMaker endpoint (these are resources not created by the CloudFormation template).
 
-2. Go to CloudFormation in the AWS console, select `expedia-feature-store-demo-v2` and click 'Delete'.
+2. Go to CloudFormation in the AWS console, select `expedia-feature-store-demo-v2` and click 'Delete'. Verify all the resources (S3 buckets, SageMaker notebook, SageMaker endpoint, Lambda, DynamoDB) are indeed deleted.
 
 ## Security
 
@@ -68,6 +68,11 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the MIT-0 License. See the [LICENSE](./LICENSE) file.
+
+## Running Cost
+
+The running cost for this demo is $15-$20 per day. 
+
 ## References
 
 1. [SageMaker Feature store end-to-end workshop](https://github.com/aws-samples/amazon-sagemaker-feature-store-end-to-end-workshop)
