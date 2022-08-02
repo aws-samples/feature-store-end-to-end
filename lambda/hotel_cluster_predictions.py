@@ -10,6 +10,7 @@ import logging
 import base64
 import boto3
 import json
+import sys
 import os
 
 
@@ -60,27 +61,56 @@ def decode_payload(event_data):
 
 def handler(event, context):
     """
-    This handler is triggered by incoming Kinesis events,
-    which contain a payload encapsulating the transaction data.
+    This handler is triggered by incoming Kinesis events or a REST API from an 
+    API Gateway.
+    The event contain a payload encapsulating the transaction data.
     The Lambda will then lookup corresponding records in the
     aggregate feature groups, assemble a payload for inference,
     and call the inference endpoint to generate a prediction.
     """
-    logger.info('received event: {json.dumps(event, indent=2)}')
+    logger.info("print event")
+    logger.info(event)
+    logger.info("printing context")
+    logger.info(context)
+    logger.info(f'received event: {json.dumps(event, indent=2)}')
 
-    records = event['Records']
-    logger.info(f'event contains {len(records)} records')
-
+    """
+    The format of the kinesis event and a REST API event are different so there
+    is handling here for both. We assume that if the "Records" key is there and
+    test if the first record contains the key 'kinesis' then it is safe to assume
+    this instance is triggered via Kinesis, if these checks fail then we assume
+    REST API and look for different keys.
+    """
+    from_kinesis = False
+    records = event.get('Records')
+    if records is not None and len(records) :
+        from_kinesis = True if records[0].get('kinesis') else False
+        
+    logger.info(f"from_kinesis={from_kinesis}")
+    
+    if from_kinesis is True:
+        logger.info(f'event contains {len(records)} records')
+    else:
+        logger.info("seems like lambda is triggered from an API endpoint")
+        # to keep the code consistent between the kinesis and non-kinesis
+        # scenario create a records array
+        records = [event]
+        
+    predictions = []    
     for rec in records:
         # Each record has separate eventID, etc.
-        event_id = rec['eventID']
-        event_source_arn = rec['eventSourceARN']
-        logger.info(f'eventID: {event_id}, eventSourceARN: {event_source_arn}')
+        if from_kinesis:
+            event_id = rec['eventID']
+            event_source_arn = rec['eventSourceARN']
+            kinesis = rec['kinesis']
+            event_payload = decode_payload(kinesis['data'])
+            logger.info(f'eventID: {event_id}, eventSourceARN: {event_source_arn}')
+        else:
+            event_payload = rec['data']
+            
         logger.info(f"ep_name={ep_name}, fg_name={fg_name}, ddb_table_name={ddb_table_name}, "
                     f"online_feature_group_key={online_feature_group_key}, feature_list_to_lookup={feature_list_to_lookup}")
 
-        kinesis = rec['kinesis']
-        event_payload = decode_payload(kinesis['data'])
         # this is the json event as a string
         logger.info(event_payload)
 
@@ -121,7 +151,7 @@ def handler(event, context):
                                                      Body=csv_input_for_model)
         
         result = json.loads(response['Body'].read().decode())
-        logger.info(f"resp from sagemaker = {result}")
+        logger.info(f"resp from sagemaker={result}")
 
         # write to dynamo db table 
         table = dynamodb.Table(ddb_table_name)
@@ -132,7 +162,13 @@ def handler(event, context):
         event_payload = json.loads(json.dumps(event_payload), parse_float=Decimal)
         # put in the table
         table.put_item(Item=event_payload)
+        
+        # prepare response for returning to caller
+        predictions.append(int(result))
         logger.info(f"after writing result to ddb table = {ddb_table_name}")
         
     logger.info("all done, exiting")
-    return
+    response = {
+        "hotel_cluster": predictions
+    }
+    return response
